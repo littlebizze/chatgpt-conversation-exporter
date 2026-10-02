@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { unzipSync, strFromU8 } from 'fflate';
 import { downloadFiles, uniqueFilename } from '../src/files';
 import { contentRequest } from '../src/api';
+import { buildExport } from '../src/conversation';
+import type { ExportProgress } from '../src/types';
 const id = 'test-conversation';
 
 test('filenames cannot escape the ZIP folder or overwrite another entry', () => {
@@ -36,8 +38,10 @@ test('combined ZIP contains every branch, file bytes and partial-failure report'
     if (url.startsWith('https://storage.example')) return new Response('hello');
     return new Response('', { status: 404 });
   });
-  const conversation = { mode: 'all', conversation: { mapping: { a: {}, b: {} } } };
-  const message = await downloadFiles(id, 'secret-token', conversation);
+  const conversation = buildExport({ title: 'Project: planning', mapping: { a: {}, b: {} } }, id);
+  const progress: ExportProgress[] = [];
+  const message = await downloadFiles(id, 'secret-token', conversation, state => progress.push(state));
+  assert.deepEqual(progress.filter(state => state.total !== undefined).map(state => [state.completed, state.total]), [[2, 5], [3, 5], [4, 5], [4, 5]]);
   assert.match(message, /1 of 2 files/);
   assert.ok(blob);
   const zip = unzipSync(new Uint8Array(await blob.arrayBuffer()));
@@ -56,6 +60,6 @@ test('combined ZIP contains every branch, file bytes and partial-failure report'
 
 test('incomplete file lists and insecure download URLs are rejected', async context => {
   context.mock.method(globalThis, 'fetch', async () => Response.json({ items: [], has_more: true }));
-  await assert.rejects(downloadFiles(id, 'token', {}), /incomplete/);
+  await assert.rejects(downloadFiles(id, 'token', buildExport({ mapping: {} }, id)), /incomplete/);
   assert.throws(() => contentRequest('http://storage.example/file', 'token'), /invalid file URL/);
 });

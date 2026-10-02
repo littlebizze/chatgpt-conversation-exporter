@@ -1,7 +1,9 @@
 import { zipSync, strToU8 } from 'fflate';
 import { apiRequest, contentRequest } from './api';
-import { errorMessage, isRecord } from './types';
+import { errorMessage, isRecord, type ReportProgress } from './types';
 import { download } from './download';
+import { archiveFilename } from './filename';
+import type { buildExport } from './conversation';
 
 export function uniqueFilename(value: string, used: Set<string>): string {
   const base = value.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 150).replace(/[. ]+$/g, '') || 'file';
@@ -15,7 +17,8 @@ export function uniqueFilename(value: string, used: Set<string>): string {
   return name;
 }
 
-export async function downloadFiles(id: string, token: string, conversation?: unknown): Promise<string> {
+export async function downloadFiles(id: string, token: string, conversation: ReturnType<typeof buildExport>, report: ReportProgress = () => {}): Promise<string> {
+  report({ message: 'Finding files…' });
   const response = await apiRequest(`/backend-api/conversations/${encodeURIComponent(id)}/files?limit=200`, token);
   const list: unknown = await response.json();
   if (!isRecord(list) || !Array.isArray(list.items)) throw new Error('ChatGPT returned an unexpected file list.');
@@ -24,17 +27,24 @@ export async function downloadFiles(id: string, token: string, conversation?: un
   }
   const archive: Record<string, Uint8Array> = Object.create(null);
   const used = new Set(['export-report.json', 'conversation.json']);
-  if (conversation) archive['conversation.json'] = strToU8(JSON.stringify(conversation, null, 2));
+  archive['conversation.json'] = strToU8(JSON.stringify(conversation, null, 2));
   const seen = new Set<string>();
   const results: { name: string; ok: boolean; error?: string }[] = [];
-  let totalBytes = 0;
-  // Sequential requests keep rate limiting simple and avoid buffering several large responses at once.
-  for (const item of list.items) {
+  const files = list.items.filter((item): item is Record<string, unknown> => {
     if (!isRecord(item)) throw new Error('ChatGPT returned an invalid file entry.');
     const fileId = typeof item.file_id === 'string' ? item.file_id : item.id;
     if (typeof fileId !== 'string') throw new Error('ChatGPT returned a file without an ID.');
-    if (seen.has(fileId)) continue;
+    if (seen.has(fileId)) return false;
     seen.add(fileId);
+    return true;
+  });
+  // The total is known after listing files: conversation, file list, each file, and the ZIP.
+  const total = files.length + 3;
+  report({ message: files.length ? `Downloading ${files.length} ${files.length === 1 ? 'file' : 'files'}…` : 'No files to download.', completed: 2, total });
+  let totalBytes = 0;
+  // Sequential requests keep rate limiting simple and avoid buffering several large responses at once.
+  for (const item of files) {
+    const fileId = (typeof item.file_id === 'string' ? item.file_id : item.id) as string;
     const name = uniqueFilename(typeof item.file_name === 'string' ? item.file_name : `${fileId}.bin`, used);
     try {
       let fileResponse = await apiRequest(`/backend-api/files/download/${encodeURIComponent(fileId)}?inline=true&download_intent=false&check_context_scopes_for_conversation_id=${encodeURIComponent(id)}`, token);
@@ -58,13 +68,14 @@ export async function downloadFiles(id: string, token: string, conversation?: un
     } catch (error) {
       results.push({ name, ok: false, error: errorMessage(error) });
     }
+    report({ message: `Processed ${results.length} of ${files.length} files…`, completed: results.length + 2, total });
   }
   const saved = results.filter(result => result.ok).length;
-  if (!saved && !conversation) throw new Error(results[0]?.error ?? 'No downloadable files were found.');
   archive['export-report.json'] = strToU8(JSON.stringify({ conversationId: id, results }, null, 2));
+  report({ message: 'Building ZIP…', completed: total - 1, total });
   const zip = zipSync(archive, { level: 0 });
-  download(new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' }), `chatgpt-${id}-${conversation ? 'full' : 'files'}.zip`);
-  return `Started download: ${conversation ? 'all branches and ' : ''}${saved} of ${results.length} files. ${saved < results.length ? 'See export-report.json for failures.' : ''}`;
+  download(new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' }), archiveFilename(conversation.title, new Date(conversation.exportedAt)));
+  return `Started download: all branches and ${saved} of ${results.length} files.${saved < results.length ? ' See export-report.json for failures.' : ''}`;
 }
 
 async function readLimited(response: Response, remaining: number): Promise<Uint8Array> {

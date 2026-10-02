@@ -1,6 +1,13 @@
 # ChatGPT Conversation Exporter
 
-Save a ChatGPT conversation as JSON, download its files, or put both in one ZIP.
+Do you have a long ChatGPT conversation in your browser, where finding old messages is difficult or
+requires scrolling forever?
+
+Do you often want to take the current conversation, and start a new one to discuss something tangentially
+related, without losing the focus of the current conversation?
+
+This app is a Chromium browser extension (works on Google Chrome, Microsoft Edge and most other browsers) which
+allows you to export every conversation branch and its files in one ZIP.
 
 ## Install
 
@@ -16,17 +23,19 @@ If you have the source code, build it first with the commands below, then load
 
 ## Use
 
-Open a saved conversation on **chatgpt.com**, then click the extension:
+Open a saved conversation on **chatgpt.com**, click the extension, then click
+**Export**. It saves all branches and available files in one ZIP.
 
-- **Download full conversation & files** saves every branch and the files in one ZIP.
-- **Export current branch** saves the branch selected by ChatGPT as JSON.
-- **Export all branches** saves the complete conversation tree as JSON.
-- **Download conversation files** saves the available files in a ZIP.
+The filename uses your local date and time plus the conversation title:
+`20261002-09-05 Project planning.zip`. Characters that are invalid in filenames
+are removed from the title. Long titles are shortened. Hours use `00–23`, and
+hyphens replace colons so the filename works on Windows too.
 
 Keep the ChatGPT tab open until the download starts. Keep the popup open to see
-progress and errors. Large exports can take time. ZIP exports include
-`export-report.json`, which lists successful downloads and failures. The full
-export also includes `conversation.json`, even if the conversation has no files.
+progress and errors. The progress bar counts the conversation, the file list,
+each file, and the ZIP. Large exports can take time. You can close and reopen
+the popup to check progress; keep the ChatGPT tab open. ZIP exports include
+`export-report.json`, which lists successful downloads and failures. The ZIP also includes `conversation.json`, even if the conversation has no files.
 
 ## How it works
 
@@ -72,15 +81,15 @@ extension on the Extensions page, and reload the ChatGPT tab.
 `release/chatgpt-conversation-exporter.zip`. The archive contains the extension
 and license files. It does not contain the source tree or development tools.
 
-The TypeScript source is split by purpose: `popup.ts` handles the buttons,
+The TypeScript source is split by purpose: `popup.ts` handles the button,
 `content.ts` runs exports in the tab, `api.ts` handles requests,
-`conversation.ts` selects branches, and `files.ts` builds file archives.
+`conversation.ts` formats the conversation, and `files.ts` builds file archives.
 All runtime code is bundled locally. Tests use synthetic conversations and files;
 they do not need a ChatGPT account.
 
-Before distributing a release, try all four actions in a signed-in browser with
-a branched conversation and an attachment. Check the downloaded JSON and ZIP,
-including the failure report. IT can review the manifest and source, then choose
+Before distributing a release, try Export in a signed-in browser with
+a branched conversation and an attachment. Open the ZIP and check `conversation.json`, the downloaded files, and
+`export-report.json`. IT can review the manifest and source, then choose
 an installation method that fits its browser management setup.
 
 ## License

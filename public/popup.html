@@ -7,15 +7,15 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <main>
+  <main aria-busy="true">
     <h1>ChatGPT Conversation Exporter</h1>
-    <div class="button-area">
-      <button data-mode="full" disabled>Download full conversation &amp; files</button>
-      <button data-mode="current" disabled>Export current branch</button>
-      <button data-mode="all" data-variant="secondary" disabled>Export all branches</button>
-      <button data-mode="files" data-variant="secondary" disabled>Download conversation files</button>
+    <button id="export" disabled>Export</button>
+    <div class="status-row">
+      <span id="spinner" class="spinner" aria-hidden="true"></span>
+      <p id="status" role="status">Checking page…</p>
     </div>
-    <p id="status" role="status">Checking page…</p>
+    <progress id="progress" aria-label="Export progress" aria-describedby="progress-count" hidden></progress>
+    <p id="progress-count" hidden></p>
   </main>
   <script src="popup.js"></script>
 </body>

@@ -1,6 +1,10 @@
-export type ExportMode = 'current' | 'all' | 'files' | 'full';
-export interface ExportRequest { type: 'export-conversation'; mode: ExportMode; conversationId: string }
-export interface ExportResult { ok: boolean; message: string }
+export interface ExportRequest { type: 'export-conversation'; conversationId: string }
+export interface ExportProgress { message: string; completed?: number; total?: number }
+export interface ExportState extends ExportProgress {
+  phase: 'idle' | 'running' | 'success' | 'error';
+  conversationId?: string;
+}
+export type ReportProgress = (progress: ExportProgress) => void;
 export interface ConversationNode {
   parent?: string | null;
   children?: string[];
