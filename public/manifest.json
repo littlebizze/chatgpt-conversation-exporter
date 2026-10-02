@@ -1,14 +1,32 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT Conversation Exporter",
+  "name": "Maryam's ChatGPT Fork Tool",
   "version": "1.0.0",
-  "description": "Save ChatGPT conversations as JSON and their files as a ZIP archive.",
+  "description": "Continue a ChatGPT conversation in a new tab, or download all branches and files in one ZIP.",
+  "minimum_chrome_version": "120",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   "action": {
-    "default_title": "Export ChatGPT conversation",
-    "default_popup": "popup.html"
+    "default_title": "Maryam's ChatGPT Fork Tool",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/branch-16.png",
+      "32": "icons/branch-32.png"
+    }
+  },
+  "host_permissions": [
+    "https://chatgpt.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/branch-16.png",
+    "32": "icons/branch-32.png",
+    "48": "icons/branch-48.png",
+    "128": "icons/branch-128.png"
   }
 }

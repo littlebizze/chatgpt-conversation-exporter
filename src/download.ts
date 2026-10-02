@@ -6,6 +6,9 @@ export function download(blob: Blob, name: string): void {
   document.body.append(link);
   link.click();
   link.remove();
-  // Keep the URL alive until the browser has started reading the download.
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  const revoke = () => URL.revokeObjectURL(url);
+  addEventListener('pagehide', revoke, { once: true });
+  // Chrome can ask the user to allow multiple downloads from one page. Keep the
+  // blob URL alive long enough for that prompt without keeping it indefinitely.
+  setTimeout(revoke, 10 * 60_000);
 }

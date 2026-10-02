@@ -1,8 +1,9 @@
-export interface ExportRequest { type: 'export-conversation'; conversationId: string }
+export interface ExportRequest { type: 'export-conversation'; conversationId: string; action: 'branch' | 'download' }
 export interface ExportProgress { message: string; completed?: number; total?: number }
 export interface ExportState extends ExportProgress {
-  phase: 'idle' | 'running' | 'success' | 'error';
+  phase: 'idle' | 'running' | 'success' | 'error' | 'canceled';
   conversationId?: string;
+  notified?: boolean;
 }
 export type ReportProgress = (progress: ExportProgress) => void;
 export interface ConversationNode {

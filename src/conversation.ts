@@ -23,8 +23,8 @@ export function buildExport(conversation: Conversation, id: string) {
   });
   return {
     schemaVersion: 1, exportedAt: new Date().toISOString(),
-    conversationId: id, url: `https://chatgpt.com/c/${id}`, mode: 'all' as const,
+    conversationId: id, url: `https://chatgpt.com/c/${id}`,
     title: typeof conversation.title === 'string' ? conversation.title : 'ChatGPT conversation', messages,
-    conversation: { ...conversation, mapping },
+    conversation,
   };
 }

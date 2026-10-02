@@ -1,7 +1,7 @@
 import { zipSync, strToU8 } from 'fflate';
-import { apiRequest, contentRequest } from './api';
+import { apiRequest, contentRequest, readJson, RateLimitError } from './api';
 import { errorMessage, isRecord, type ReportProgress } from './types';
-import { download } from './download';
+import { conversationSchema } from './schema';
 import { archiveFilename } from './filename';
 import type { buildExport } from './conversation';
 
@@ -17,16 +17,17 @@ export function uniqueFilename(value: string, used: Set<string>): string {
   return name;
 }
 
-export async function downloadFiles(id: string, token: string, conversation: ReturnType<typeof buildExport>, report: ReportProgress = () => {}): Promise<string> {
+export async function buildBundle(id: string, token: string, conversation: ReturnType<typeof buildExport>, report: ReportProgress = () => {}, signal?: AbortSignal): Promise<{ bytes: Uint8Array; filename: string; summary: string; failures: number }> {
   report({ message: 'Finding files…' });
-  const response = await apiRequest(`/backend-api/conversations/${encodeURIComponent(id)}/files?limit=200`, token);
-  const list: unknown = await response.json();
+  const response = await apiRequest(`/backend-api/conversations/${encodeURIComponent(id)}/files?limit=200`, token, signal);
+  const list: unknown = await readJson(response);
   if (!isRecord(list) || !Array.isArray(list.items)) throw new Error('ChatGPT returned an unexpected file list.');
   if (list.has_more || list.next_cursor || list.items.length >= 200) {
     throw new Error('The file list may be incomplete (200-file limit). This conversation cannot be archived safely.');
   }
   const archive: Record<string, Uint8Array> = Object.create(null);
-  const used = new Set(['export-report.json', 'conversation.json']);
+  const used = new Set(['export-report.json', 'conversation.json', 'conversation.schema.json']);
+  archive['conversation.schema.json'] = strToU8(JSON.stringify(conversationSchema, null, 2));
   archive['conversation.json'] = strToU8(JSON.stringify(conversation, null, 2));
   const seen = new Set<string>();
   const results: { name: string; ok: boolean; error?: string }[] = [];
@@ -47,16 +48,16 @@ export async function downloadFiles(id: string, token: string, conversation: Ret
     const fileId = (typeof item.file_id === 'string' ? item.file_id : item.id) as string;
     const name = uniqueFilename(typeof item.file_name === 'string' ? item.file_name : `${fileId}.bin`, used);
     try {
-      let fileResponse = await apiRequest(`/backend-api/files/download/${encodeURIComponent(fileId)}?inline=true&download_intent=false&check_context_scopes_for_conversation_id=${encodeURIComponent(id)}`, token);
+      let fileResponse = await apiRequest(`/backend-api/files/download/${encodeURIComponent(fileId)}?inline=true&download_intent=false&check_context_scopes_for_conversation_id=${encodeURIComponent(id)}`, token, signal);
       let expectedSize = typeof item.file_size_bytes === 'number' ? item.file_size_bytes : null;
       if (fileResponse.headers.get('content-type')?.includes('json')) {
         // A JSON attachment and a download descriptor share a MIME type. Inspect a clone to preserve file bytes.
-        const descriptor: unknown = await fileResponse.clone().json().catch(() => null);
+        const descriptor: unknown = await readJson(fileResponse.clone(), fileResponse).catch(() => null);
         if (isRecord(descriptor) && 'download_url' in descriptor) {
           if (typeof descriptor.download_url !== 'string' || !descriptor.download_url ||
               (descriptor.status && descriptor.status !== 'success')) throw new Error('The file download link is unavailable.');
           if (typeof descriptor.file_size_bytes === 'number') expectedSize = descriptor.file_size_bytes;
-          fileResponse = await contentRequest(descriptor.download_url, token);
+          fileResponse = await contentRequest(descriptor.download_url, token, signal);
         }
       }
       const bytes = await readLimited(fileResponse, 250 * 1024 * 1024 - totalBytes);
@@ -66,6 +67,8 @@ export async function downloadFiles(id: string, token: string, conversation: Ret
       archive[name] = bytes;
       results.push({ name, ok: true });
     } catch (error) {
+      signal?.throwIfAborted();
+      if (error instanceof RateLimitError) throw error;
       results.push({ name, ok: false, error: errorMessage(error) });
     }
     report({ message: `Processed ${results.length} of ${files.length} files…`, completed: results.length + 2, total });
@@ -73,9 +76,12 @@ export async function downloadFiles(id: string, token: string, conversation: Ret
   const saved = results.filter(result => result.ok).length;
   archive['export-report.json'] = strToU8(JSON.stringify({ conversationId: id, results }, null, 2));
   report({ message: 'Building ZIP…', completed: total - 1, total });
+  signal?.throwIfAborted();
   const zip = zipSync(archive, { level: 0 });
-  download(new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' }), archiveFilename(conversation.title, new Date(conversation.exportedAt)));
-  return `Started download: all branches and ${saved} of ${results.length} files.${saved < results.length ? ' See export-report.json for failures.' : ''}`;
+  return { bytes: zip, filename: archiveFilename(conversation.title, new Date(conversation.exportedAt)),
+    failures: results.length - saved,
+    summary: `All branches and ${saved} of ${results.length} files.${saved < results.length ? ' See export-report.json for failures.' : ''}` };
+
 }
 
 async function readLimited(response: Response, remaining: number): Promise<Uint8Array> {

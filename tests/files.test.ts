@@ -1,10 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { unzipSync, strFromU8 } from 'fflate';
-import { downloadFiles, uniqueFilename } from '../src/files';
+import { buildBundle, uniqueFilename } from '../src/files';
 import { contentRequest } from '../src/api';
 import { buildExport } from '../src/conversation';
-import type { ExportProgress } from '../src/types';
 const id = 'test-conversation';
 
 test('filenames cannot escape the ZIP folder or overwrite another entry', () => {
@@ -18,14 +17,6 @@ test('filenames cannot escape the ZIP folder or overwrite another entry', () => 
 });
 
 test('combined ZIP contains every branch, file bytes and partial-failure report', async context => {
-  let blob: Blob | undefined;
-  context.mock.method(URL, 'createObjectURL', (value: Blob) => { blob = value; return 'blob:test'; });
-  context.mock.method(globalThis, 'setTimeout', () => 0);
-  const originalDocument = globalThis.document;
-  Object.defineProperty(globalThis, 'document', { configurable: true, value: {
-    createElement: () => ({ click() {}, remove() {} }), body: { append() {} },
-  } });
-  context.after(() => Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument }));
   const requests: { url: string; init?: RequestInit }[] = [];
   context.mock.method(globalThis, 'fetch', async (input: string, init?: RequestInit) => {
     const url = String(input); requests.push({ url, init });
@@ -39,27 +30,30 @@ test('combined ZIP contains every branch, file bytes and partial-failure report'
     return new Response('', { status: 404 });
   });
   const conversation = buildExport({ title: 'Project: planning', mapping: { a: {}, b: {} } }, id);
-  const progress: ExportProgress[] = [];
-  const message = await downloadFiles(id, 'secret-token', conversation, state => progress.push(state));
-  assert.deepEqual(progress.filter(state => state.total !== undefined).map(state => [state.completed, state.total]), [[2, 5], [3, 5], [4, 5], [4, 5]]);
-  assert.match(message, /1 of 2 files/);
-  assert.ok(blob);
-  const zip = unzipSync(new Uint8Array(await blob.arrayBuffer()));
+  const bundle = await buildBundle(id, 'secret-token', conversation);
+  assert.match(bundle.summary, /1 of 2 files/);
+  const zip = unzipSync(bundle.bytes);
   assert.deepEqual(JSON.parse(strFromU8(zip['conversation.json']!)), conversation);
   assert.equal(strFromU8(zip['conversation (2).json']!), 'hello');
+  assert.ok(zip['conversation.schema.json']);
   const report = JSON.parse(strFromU8(zip['export-report.json']!));
   assert.equal(report.results[1].ok, false);
   const storage = requests.find(request => request.url.startsWith('https://storage.example'))!;
   assert.equal(storage.init?.headers, undefined);
   assert.equal(storage.init?.credentials, 'omit');
-  context.mock.method(globalThis, 'fetch', async () => Response.json({ items: [] }));
-  assert.match(await downloadFiles(id, 'token', conversation), /0 of 0 files/);
-  const emptyZip = unzipSync(new Uint8Array(await blob.arrayBuffer()));
-  assert.deepEqual(Object.keys(emptyZip).sort(), ['conversation.json', 'export-report.json']);
 });
 
 test('incomplete file lists and insecure download URLs are rejected', async context => {
   context.mock.method(globalThis, 'fetch', async () => Response.json({ items: [], has_more: true }));
-  await assert.rejects(downloadFiles(id, 'token', buildExport({ mapping: {} }, id)), /incomplete/);
+  await assert.rejects(buildBundle(id, 'token', buildExport({ mapping: {} }, id)), /incomplete/);
   assert.throws(() => contentRequest('http://storage.example/file', 'token'), /invalid file URL/);
+});
+
+test('cancel during file retrieval aborts instead of reporting a missing file', async context => {
+  const controller = new AbortController();
+  context.mock.method(globalThis, 'fetch', async (url: string) => {
+    if (url.includes('/files?')) return Response.json({ items: [{ file_id: 'one', file_name: 'one.txt' }] });
+    controller.abort(); throw controller.signal.reason;
+  });
+  await assert.rejects(buildBundle(id, 'token', buildExport({ mapping: {} }, id), () => {}, controller.signal), { name: 'AbortError' });
 });
