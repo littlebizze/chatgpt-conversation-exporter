@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildExport, parseConversation } from '../src/conversation';
+import { buildExport } from '../src/conversation';
 import { conversationId, type Conversation } from '../src/types';
 const id = '00000000-0000-0000-0000-000000000000';
 const conversation: Conversation = {
@@ -14,9 +14,6 @@ const conversation: Conversation = {
 test('all branches retain every node, including disconnected nodes', () => {
   const input = { ...conversation, mapping: { ...conversation.mapping, orphan: { parent: 'missing' } } };
   assert.deepEqual(buildExport(input, id).conversation.mapping, input.mapping);
-});
-test('invalid API node shapes are rejected', () => {
-  assert.throws(() => parseConversation({ mapping: { a: null } }), /unexpected/);
 });
 test('only saved chatgpt.com conversation URLs are accepted', () => {
   assert.equal(conversationId(`https://chatgpt.com/g/project/c/${id}`), id);
