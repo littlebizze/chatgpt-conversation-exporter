@@ -72,13 +72,20 @@ message box and sends this prompt:
 
 > Attached is an export of another conversation, including its branches and files. Continue from the branch identified as current. Read that branch and inspect the relevant files. Summarize the goal, decisions, unresolved questions, and next step. Tell me if anything could not be read, then wait for my next instruction.
 
-The extension confirms that ChatGPT saved the attachment and prompt, then sets
-and checks the numbered branch title. It leaves your original tab selected.
-Before renaming, the extension waits for ChatGPT's `title_generation` event in
-the existing response stream (up to two minutes). It then sets the branch name
-and verifies the saved title through the API. ChatGPT's sidebar can still show
-the old title until it refreshes. No extra requests are sent while waiting for
-the title event.
+The extension confirms that ChatGPT saved the attachment and prompt and started responding. It leaves your original tab selected.
+The extension sends rename requests 10 and 30 seconds after the new chat's
+automatic title event. At 60 seconds, it checks the saved title and makes at
+most one corrective rename if ChatGPT overwrote it. The sidebar may show
+the old title until it refreshes. The prompt contains only continuation instructions.
+The stream observer reads only as ChatGPT reads, keeps at most 64 KiB of partial
+text, and detaches after the title event, cancellation, or timeout. If the title
+event does not arrive within two minutes of the acknowledgement, the job stops.
+
+Branch exports contain a small `branch-metadata.json` file and the same metadata
+in `conversation.json`. These preserve the root conversation, parent, and branch
+number. When you fork a fork, the extension reads that metadata from the attached
+export without unpacking nested ZIPs. Older exports without metadata start a new
+root from the current conversation.
 
 There is no separate server, analytics, or saved session token. Branching sends
 the archive to ChatGPT as an attachment; Download ZIP saves it locally.

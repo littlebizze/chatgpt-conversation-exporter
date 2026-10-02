@@ -50,16 +50,27 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, reply) => {
     }
     if (!fromTab || source === undefined) throw new Error('A ChatGPT tab is required.');
     const stored = await chrome.storage.session.get('owner');
-    const owner = stored.owner as { source: number; target?: number } | undefined;
+    const owner = stored.owner as { source: number; target?: number; jobId?: string } | undefined;
+    if (message.type === 'branch-known-titles' || message.type === 'branch-remember-title') {
+      if (!owner || owner.source !== source || owner.jobId !== message.jobId) throw new Error('Only the current job can reserve its title.');
+      const storedTitles = await chrome.storage.session.get('branchTitles');
+      const branchTitles = Array.isArray(storedTitles.branchTitles)
+        ? storedTitles.branchTitles.filter((title): title is string => typeof title === 'string') : [];
+      if (message.type === 'branch-known-titles') return branchTitles;
+      if (!isRecord(message.payload) || typeof message.payload.title !== 'string') throw new Error('Invalid branch title.');
+      await chrome.storage.session.set({ branchTitles: [...new Set([...branchTitles, message.payload.title])] });
+      return true;
+    }
     if (message.type === 'branch-acquire') {
-      if (owner && owner.source !== source) {
+      if (typeof message.jobId !== 'string') throw new Error('Reload the extension and refresh this ChatGPT tab before trying again.');
+      if (owner) {
         const state = await chrome.tabs.sendMessage(owner.source, { type: 'export-status' }).catch(() => null);
         if (state?.phase === 'running') throw new Error('Another job is running. Wait for it to finish.');
       }
-      await chrome.storage.session.set({ owner: { source } });
+      await chrome.storage.session.set({ owner: { source, jobId: message.jobId } });
       return true;
     }
-    if (!owner || owner.source !== source) throw new Error('The branch operation ended. Try again.');
+    if (!owner || owner.source !== source || owner.jobId !== message.jobId) throw new Error('The branch operation ended. Try again.');
     if (message.type === 'branch-cancel') {
       if (owner.target !== undefined) await chrome.tabs.sendMessage(owner.target, { type: 'branch-target-cancel' }).catch(() => {});
       return true;
@@ -68,7 +79,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, reply) => {
     if (message.type === 'branch-create') {
       const tab = await chrome.tabs.create({ url: 'https://chatgpt.com/', active: false, windowId });
       if (tab.id === undefined) throw new Error('Could not open a new ChatGPT tab.');
-      await chrome.storage.session.set({ owner: { source, target: tab.id } });
+      await chrome.storage.session.set({ owner: { source, target: tab.id, jobId: owner.jobId } });
       return tab.id;
     }
     if (owner.target === undefined) throw new Error('The new tab is unavailable.');
@@ -92,6 +103,11 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, reply) => {
 chrome.tabs.onRemoved.addListener(tabId => {
   queue = queue.then(async () => {
     const { owner } = await chrome.storage.session.get('owner');
-    if (isRecord(owner) && (owner.source === tabId || owner.target === tabId)) return chrome.storage.session.remove('owner');
+    if (isRecord(owner) && (owner.source === tabId || owner.target === tabId)) {
+      if (owner.source === tabId && typeof owner.target === 'number') {
+        await chrome.tabs.sendMessage(owner.target, { type: 'branch-target-cancel' }).catch(() => {});
+      }
+      await chrome.storage.session.remove('owner');
+    }
   }).catch(() => {});
 });

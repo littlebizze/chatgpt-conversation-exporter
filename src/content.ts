@@ -1,3 +1,4 @@
+import { baseTitle, findBranchTitle } from './branch-title';
 import { pause } from './wait';
 import { accessToken, apiRequest, readJson } from './api';
 import { buildExport, parseConversation } from './conversation';
@@ -9,10 +10,10 @@ import { conversationId, errorMessage, isRecord, type ExportRequest, type Export
 declare global { interface Window { chatGptExporterInstalled?: boolean } }
 const BRANCH_STEPS = 5;
 
-async function bridge(type: string, payload?: Record<string, unknown>): Promise<unknown> {
+async function sendBridge(type: string, payload?: Record<string, unknown>, jobId?: string): Promise<unknown> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const response = await Promise.race([
-    chrome.runtime.sendMessage({ type, payload }),
+    chrome.runtime.sendMessage({ type, payload, jobId }),
     new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error('The extension could not reach the new tab within 15 seconds. Check that tab before trying again.')), 15_000);
     }),
@@ -20,7 +21,8 @@ async function bridge(type: string, payload?: Record<string, unknown>): Promise<
   if (!response || response.error) throw new Error(response?.error ?? 'The new tab could not be reached.');
   return response.value;
 }
-async function run(request: ExportRequest, report: ReportProgress, signal: AbortSignal): Promise<Completion> {
+async function run(request: ExportRequest, report: ReportProgress, signal: AbortSignal, jobId: string): Promise<Completion> {
+  const bridge = (type: string, payload?: Record<string, unknown>) => sendBridge(type, payload, jobId);
   const id = conversationId(location.href);
   if (!id || id !== request.conversationId) throw new Error('The conversation changed. Reopen the extension and try again.');
   const branch = request.action === 'branch';
@@ -41,10 +43,21 @@ async function run(request: ExportRequest, report: ReportProgress, signal: Abort
       }
     }
     let total = 0;
+    let requestedTitle = '';
     const bundle = await buildBundle(id, token, data, progress => {
       total = progress.total ?? total;
       report({ ...progress, total: progress.total === undefined ? undefined : progress.total + (branch ? BRANCH_STEPS : 0) });
-    }, signal);
+    }, signal, branch ? async parent => {
+      report({ message: 'Choosing the branch name…' });
+      const rootTitle = parent?.rootTitle ?? baseTitle(data.title);
+      const known = await bridge('branch-known-titles');
+      if (!Array.isArray(known)) throw new Error('Could not read recent branch names.');
+      if (parent) known.push(`⎇ ${parent.branchNumber} - ${rootTitle}`);
+      requestedTitle = await findBranchTitle(rootTitle, token, signal, known);
+      await bridge('branch-remember-title', { title: requestedTitle });
+      return { rootConversationId: parent?.rootConversationId ?? id, rootTitle,
+        parentConversationId: id, branchNumber: Number(/^⎇ (\d+) - /.exec(requestedTitle)?.[1]) };
+    } : undefined);
     signal.throwIfAborted();
     if (!branch) {
       download(new Blob([bundle.bytes as Uint8Array<ArrayBuffer>], { type: 'application/zip' }), bundle.filename);
@@ -79,8 +92,9 @@ async function run(request: ExportRequest, report: ReportProgress, signal: Abort
       const result = await bridge('branch-relay', { type: 'branch-chunk', chunk: btoa(binary) });
       if (!isRecord(result) || !result.ok) throw new Error(isRecord(result) && typeof result.error === 'string' ? result.error : 'Could not transfer the archive.');
     }
+    bundle.bytes = new Uint8Array();
     signal.throwIfAborted();
-    await bridge('branch-relay', { type: 'branch-target-start', filename: bundle.filename, title: data.title });
+    await bridge('branch-relay', { type: 'branch-target-start', filename: bundle.filename, title: requestedTitle });
     // Each target stage has its own timeout. Keep ownership until it reports a
     // terminal result, so a slower target cannot keep running behind a retry.
     let lastMessageFailure = 0;
@@ -124,6 +138,7 @@ if (!window.chatGptExporterInstalled && location.origin === 'https://chatgpt.com
   let state: ExportState = idle;
   let controller = new AbortController();
   let canceling = false;
+  let jobId = '';
   function visibleState(): ExportState {
     if (state.conversationId === conversationId(location.href)) return state;
     return state.phase === 'running'
@@ -137,7 +152,8 @@ if (!window.chatGptExporterInstalled && location.origin === 'https://chatgpt.com
       canceling = true;
       state = { ...state, message: 'Canceling…' }; reply(state);
       const jobController = controller;
-      void bridge('branch-cancel').catch(() => {}).finally(() => jobController.abort());
+      jobController.abort();
+      void sendBridge('branch-cancel', undefined, jobId).catch(() => {});
       return;
     }
     if (request.type === 'export-status') {
@@ -148,12 +164,13 @@ if (!window.chatGptExporterInstalled && location.origin === 'https://chatgpt.com
     if (request.type !== 'export-conversation' || typeof request.conversationId !== 'string') return;
     if (state.phase === 'running') { reply(visibleState()); return; }
     canceling = false;
+    jobId = crypto.randomUUID();
     controller = new AbortController();
     state = { phase: 'running', conversationId: request.conversationId, message: 'Starting export…' };
     reply(state);
     void run({ type: 'export-conversation', conversationId: request.conversationId, action: request.action === 'branch' ? 'branch' : 'download' }, progress => {
       if (!canceling) state = { phase: 'running', conversationId: request.conversationId as string, ...progress };
-    }, controller.signal).then(async completion => {
+    }, controller.signal, jobId).then(async completion => {
       state = { ...state, phase: 'success', message: completion.message, completed: state.total };
       const finishedState = state;
       const notice = await chrome.runtime.sendMessage({ type: 'notification-add', completion }).catch(() => null);

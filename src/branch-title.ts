@@ -26,8 +26,8 @@ async function searchTitles(query: string, token: string, signal?: AbortSignal):
   return page.items.map(item => (item as { title: string }).title);
 }
 
-export async function findBranchTitle(title: string, token: string, signal?: AbortSignal): Promise<string> {
+export async function findBranchTitle(title: string, token: string, signal?: AbortSignal, knownTitles: string[] = []): Promise<string> {
   const timeout = AbortSignal.timeout(30_000);
   const lookupSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-  return nextBranchTitle(title, await searchTitles(baseTitle(title), token, lookupSignal));
+  return nextBranchTitle(title, [...knownTitles, ...await searchTitles(baseTitle(title), token, lookupSignal)]);
 }

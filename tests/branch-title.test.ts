@@ -29,3 +29,8 @@ test('rate limiting stops title lookup without retries or a history scan', async
   await assert.rejects(findBranchTitle('Plan', 'token'), /limiting requests/);
   assert.equal(calls, 1);
 });
+
+test('a second branch advances even when search has not indexed the first rename', async context => {
+  context.mock.method(globalThis, 'fetch', async () => Response.json({ items: [{ title: 'Plan' }] }));
+  assert.equal(await findBranchTitle('Plan', 'token', undefined, ['⎇ 1 - Plan']), '⎇ 2 - Plan');
+});

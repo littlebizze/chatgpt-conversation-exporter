@@ -1,3 +1,4 @@
+import { readBranchMetadata, branchPrompt, type BranchMetadata } from './branch-metadata';
 import { zipSync, strToU8 } from 'fflate';
 import { apiRequest, contentRequest, readJson, RateLimitError } from './api';
 import { errorMessage, isRecord, type ReportProgress } from './types';
@@ -17,7 +18,7 @@ export function uniqueFilename(value: string, used: Set<string>): string {
   return name;
 }
 
-export async function buildBundle(id: string, token: string, conversation: ReturnType<typeof buildExport>, report: ReportProgress = () => {}, signal?: AbortSignal): Promise<{ bytes: Uint8Array; filename: string; summary: string; failures: number }> {
+export async function buildBundle(id: string, token: string, conversation: ReturnType<typeof buildExport>, report: ReportProgress = () => {}, signal?: AbortSignal, prepareBranch?: (parent?: BranchMetadata) => Promise<BranchMetadata>): Promise<{ bytes: Uint8Array; filename: string; summary: string; failures: number }> {
   report({ message: 'Finding files…' });
   const response = await apiRequest(`/backend-api/conversations/${encodeURIComponent(id)}/files?limit=200`, token, signal);
   const list: unknown = await readJson(response);
@@ -26,7 +27,7 @@ export async function buildBundle(id: string, token: string, conversation: Retur
     throw new Error('The file list may be incomplete (200-file limit). This conversation cannot be archived safely.');
   }
   const archive: Record<string, Uint8Array> = Object.create(null);
-  const used = new Set(['export-report.json', 'conversation.json', 'conversation.schema.json']);
+  const used = new Set(['export-report.json', 'conversation.json', 'conversation.schema.json', 'branch-metadata.json']);
   archive['conversation.schema.json'] = strToU8(JSON.stringify(conversationSchema, null, 2));
   archive['conversation.json'] = strToU8(JSON.stringify(conversation, null, 2));
   const seen = new Set<string>();
@@ -43,6 +44,14 @@ export async function buildBundle(id: string, token: string, conversation: Retur
   const total = files.length + 3;
   report({ message: files.length ? `Downloading ${files.length} ${files.length === 1 ? 'file' : 'files'}…` : 'No files to download.', completed: 2, total });
   let totalBytes = 0;
+  let parentMetadata: BranchMetadata | undefined;
+  const firstUser = Object.values(conversation.conversation.mapping).find(node => node.message?.author?.role === 'user' &&
+    Array.isArray(node.message.content?.parts) && node.message.content.parts.some(part => typeof part === 'string' && part.includes(branchPrompt())));
+  const metadata = firstUser?.message?.metadata;
+  const attachmentNames = new Set<string>();
+  if (isRecord(metadata) && Array.isArray(metadata.attachments)) {
+    for (const attachment of metadata.attachments) if (isRecord(attachment) && typeof attachment.name === 'string') attachmentNames.add(attachment.name);
+  }
   // Sequential requests keep rate limiting simple and avoid buffering several large responses at once.
   for (const item of files) {
     const fileId = (typeof item.file_id === 'string' ? item.file_id : item.id) as string;
@@ -64,6 +73,9 @@ export async function buildBundle(id: string, token: string, conversation: Retur
       if (expectedSize !== null && bytes.length !== expectedSize) throw new Error('The file size does not match its metadata.');
       totalBytes += bytes.length;
       if (totalBytes > 250 * 1024 * 1024) throw new Error('The archive exceeds the 250 MB memory limit.');
+      if (!parentMetadata && typeof item.file_name === 'string' && attachmentNames.has(item.file_name)) {
+        parentMetadata = readBranchMetadata(bytes);
+      }
       archive[name] = bytes;
       results.push({ name, ok: true });
     } catch (error) {
@@ -76,6 +88,12 @@ export async function buildBundle(id: string, token: string, conversation: Retur
   const saved = results.filter(result => result.ok).length;
   archive['export-report.json'] = strToU8(JSON.stringify({ conversationId: id, results }, null, 2));
   report({ message: 'Building ZIP…', completed: total - 1, total });
+  signal?.throwIfAborted();
+  const branchMetadata = prepareBranch ? await prepareBranch(parentMetadata) : parentMetadata;
+  if (branchMetadata) {
+    archive['branch-metadata.json'] = strToU8(JSON.stringify(branchMetadata, null, 2));
+    archive['conversation.json'] = strToU8(JSON.stringify({ ...conversation, branch: branchMetadata }, null, 2));
+  }
   signal?.throwIfAborted();
   const zip = zipSync(archive, { level: 0 });
   return { bytes: zip, filename: archiveFilename(conversation.title, new Date(conversation.exportedAt)),

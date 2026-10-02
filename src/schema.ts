@@ -8,6 +8,10 @@ export const conversationSchema = {
     schemaVersion: { const: 1 }, exportedAt: { type: 'string', format: 'date-time' },
     conversationId: { type: 'string' }, url: { type: 'string', format: 'uri' },
     title: { type: 'string' },
+    branch: { type: 'object', required: ['rootConversationId', 'rootTitle', 'parentConversationId', 'branchNumber'], properties: {
+      rootConversationId: { type: 'string' }, rootTitle: { type: 'string' },
+      parentConversationId: { type: 'string' }, branchNumber: { type: 'integer', minimum: 1 },
+    } },
     messages: { type: 'array', items: { type: 'object', required: ['nodeId', 'role', 'text'], properties: {
       nodeId: { type: 'string' }, role: { enum: ['user', 'assistant'] }, text: { type: 'string' },
     } } },
