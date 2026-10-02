@@ -3,20 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ChatGPT Conversation Exporter</title>
+  <title>Maryam's ChatGPT Fork Tool</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <main aria-busy="true">
-    <h1>ChatGPT Conversation Exporter</h1>
-    <button id="export" disabled>Export</button>
-    <div class="status-row">
-      <span id="spinner" class="spinner" aria-hidden="true"></span>
-      <p id="status" role="status">Checking page…</p>
+    <p id="unsupported" hidden>Please navigate to a chatgpt.com conversation to use this.</p>
+    <div id="indicator-slot" class="indicator-slot">
+      <span id="activity" class="activity" data-state="loading" role="img" aria-label="Loading">
+        <span class="spinner" aria-hidden="true"></span>
+        <svg class="ready-check" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="m7 12 3 3 7-7"></path>
+        </svg>
+      </span>
+      <span id="job-spinner" class="spinner" aria-hidden="true" hidden></span>
     </div>
-    <progress id="progress" aria-label="Export progress" aria-describedby="progress-count" hidden></progress>
-    <p id="progress-count" hidden></p>
+    <div id="actions" class="actions">
+      <div class="actions-inner">
+        <h1>Maryam's ChatGPT Fork Tool</h1>
+        <p class="description">Create a new conversation in a new tab from the current conversation.</p>
+        <button id="branch" disabled>Branch conversation</button>
+        <div class="divider" aria-hidden="true"><span>OR</span></div>
+        <p class="download-description">Save all branches, files, and the JSON schema in one ZIP on your computer.</p>
+        <button id="export" class="secondary" disabled>Download ZIP</button>
+      </div>
+    </div>
+    <div id="feedback" class="feedback">
+      <p id="status" role="status">Checking page…</p>
+      <progress id="progress" aria-label="Job progress" aria-describedby="progress-count" hidden></progress>
+      <p id="progress-count" hidden></p>
+      <button id="cancel" class="secondary" hidden>Cancel</button>
+    </div>
   </main>
+  <section id="notifications" aria-label="Recent results" aria-live="polite" hidden></section>
   <script src="popup.js"></script>
 </body>
 </html>
