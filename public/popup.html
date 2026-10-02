@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChatGPT Conversation Exporter</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <h1>ChatGPT Conversation Exporter</h1>
+    <div class="button-area">
+      <button data-mode="full" disabled>Download full conversation &amp; files</button>
+      <button data-mode="current" disabled>Export current branch</button>
+      <button data-mode="all" data-variant="secondary" disabled>Export all branches</button>
+      <button data-mode="files" data-variant="secondary" disabled>Download conversation files</button>
+    </div>
+    <p id="status" role="status">Checking page…</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
