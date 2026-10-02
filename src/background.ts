@@ -75,6 +75,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, reply) => {
     if (message.type === 'branch-inject') {
       const tab = await chrome.tabs.get(owner.target);
       if (tab.status !== 'complete' || !tab.url || new URL(tab.url).origin !== 'https://chatgpt.com' || new URL(tab.url).pathname !== '/') throw new Error('Waiting for the new ChatGPT page.');
+      await chrome.scripting.executeScript({ target: { tabId: owner.target }, world: 'MAIN', files: ['title-observer.js'] });
       await chrome.scripting.executeScript({ target: { tabId: owner.target }, files: ['target.js'] });
       return true;
     }

@@ -1,6 +1,6 @@
 import { pause } from './wait';
 import { accessToken, apiRequest, readJson, RateLimitError } from './api';
-import { guardInitialTitle, renameChat } from './title-guard';
+import { renameChat } from './rename';
 import { findBranchTitle } from './branch-title';
 import { conversationId, errorMessage, isRecord } from './types';
 
@@ -37,6 +37,14 @@ if (!window.chatGptBranchTargetInstalled && location.origin === 'https://chatgpt
   let step = 1;
   let newTitle = '';
   let newUrl = '';
+  const generatedTitles = new Set<string>();
+  const onTitle = (event: MessageEvent) => {
+    if (event.source !== window || event.origin !== location.origin || !isRecord(event.data)) return;
+    if (event.data.type === 'fork-generated-title' && typeof event.data.conversationId === 'string') {
+      generatedTitles.add(event.data.conversationId);
+    }
+  };
+  window.addEventListener('message', onTitle);
   async function start(filename: string, oldTitle: string) {
     try {
       phase = 'running'; message = 'Waiting for the new chat…'; step = 2;
@@ -83,22 +91,26 @@ if (!window.chatGptBranchTargetInstalled && location.origin === 'https://chatgpt
           stopButton();
         return savedPrompt && started;
       }, 120_000, 'ChatGPT has not acknowledged the prompt and attachment.', true);
-      message = 'Choosing the next branch number…'; step = 4;
+      message = 'Waiting for ChatGPT to name the conversation…'; step = 4;
+      await until(() => generatedTitles.has(id), 120_000, 'ChatGPT did not send its automatic title event within 2 minutes.');
+      message = 'Choosing the next branch number…';
       newTitle = await findBranchTitle(oldTitle, token, controller.signal);
       await renameChat(id, newTitle, token, controller.signal);
       await until(async signal => {
         const data: unknown = await readJson(await apiRequest(`/backend-api/conversation/${id}`, token, signal));
         if (!isRecord(data) || typeof data.title !== 'string') return false;
         if (data.title === newTitle) return true;
-        if (data.title !== 'New chat') await renameChat(id, newTitle, token, signal);
         return false;
       }, 30_000, 'The new chat title could not be confirmed.', true);
       newUrl = `https://chatgpt.com/c/${id}`;
       document.title = newTitle;
-      void guardInitialTitle(id, newTitle, token, controller.signal);
       phase = 'success'; message = `Created ${newTitle} in a new tab.`; step = 5;
     } catch (error) { phase = controller.signal.aborted ? 'canceled' : 'error'; message = errorMessage(error); }
-    finally { chunks = []; size = 0; }
+    finally {
+      chunks = []; size = 0;
+      window.removeEventListener('message', onTitle);
+      window.postMessage({ type: 'fork-title-stop' }, location.origin);
+    }
   }
   chrome.runtime.onMessage.addListener((data: unknown, sender, reply) => {
     if (sender.id !== chrome.runtime.id || !isRecord(data)) return;

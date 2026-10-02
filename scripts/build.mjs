@@ -6,7 +6,7 @@ await cp('public', 'dist', { recursive: true });
 await cp('LICENSE', 'dist/LICENSE');
 await cp('node_modules/fflate/LICENSE', 'dist/fflate-LICENSE');
 await build({
-  entryPoints: ['src/popup.ts', 'src/content.ts', 'src/background.ts', 'src/target.ts'],
+  entryPoints: ['src/popup.ts', 'src/content.ts', 'src/background.ts', 'src/target.ts', 'src/title-observer.ts'],
   outdir: 'dist', bundle: true, format: 'iife', platform: 'browser',
   target: 'chrome120', minify: false, legalComments: 'eof',
 });

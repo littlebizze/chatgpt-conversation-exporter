@@ -1,16 +1,31 @@
-# Maryam's ChatGPT Fork Tool
+# ChatGPT Fork Tool
+
+Do you often:
+
+1. Have a long chatgpt conversation in your browser, where finding old messages is difficult or 
+requires scrolling forever?
+2. Want to do a side-chat about something without losing the focus of the current conversation?
+3. Find yourself using gigantic & never-ending conversations because a new conversation doesn't know what the gigantic one knows?
+
+If so, then this chromium browser extension (works on Google Chrome, Microsoft Edge and most other browsers) is for you!
+
+Load any chatgpt.com conversation, click the extension, and click "Create Thread". It will create a new thread of the current conversation 
+in a new tab, giving it all the information from the current one so it doesn't miss anything.
+
 
 ## Install
 
-For Google Chrome 120 or newer, or Microsoft Edge 120 or newer:
+[![Download extension ZIP](https://img.shields.io/badge/Download_extension-ZIP-0f766e?style=for-the-badge)](https://github.com/littlebizze/chatgpt-conversation-exporter/releases/latest/download/chatgpt-conversation-exporter.zip)
 
-1. Extract `chatgpt-conversation-exporter.zip` into a folder you will keep.
-2. Open `chrome://extensions` or `edge://extensions`.
-3. Turn on **Developer mode**, select **Load unpacked**, and choose that folder.
-4. Pin **Maryam's ChatGPT Fork Tool** from the Extensions menu.
+1. Click **Download extension ZIP** above.
+2. Unzip the download into a folder you will keep, such as Documents. Do not select the ZIP itself in the steps below. Remember which folder you saved it in.
+3. Type `chrome://extensions` into Chrome's address bar and press Enter.
+4. Turn on **Developer mode** in the top-right corner.
+5. Click **Load unpacked** and select the unzipped folder in the location you chose from step #2
+6. Open Chrome's Extensions menu (the puzzle-piece icon) and pin **Maryam's ChatGPT Fork Tool**.
 
-If you have the source code, build it with the commands below and load `dist/`.
-On a managed work laptop, ask IT to use its approved installation method.
+For Microsoft Edge, use `edge://extensions` instead. If your work laptop blocks
+Developer mode, ask IT to install or approve the extension.
 
 ## Use
 
@@ -23,22 +38,11 @@ This lets you start a related discussion while keeping the original conversation
 The new chat uses ChatGPT's current default model and settings.
 
 New chats are named `⎇ 1 - Conversation title`, then `⎇ 2`, and so on.
-The extension checks existing and archived chats for the highest number with
-that exact base title. Branching an existing branch uses the same base title.
-Two browsers can still choose the same number if they branch at the same time.
-Chats that move in the history list during the search can also affect numbering.
-Chats moved into Projects may not be counted by ChatGPT's conversation list API.
+ChatGPT conversation renaming is very buggy and hit or miss, so sometimes this might not work.
 
-**Download ZIP** saves the same bundle instead. The filename uses your local
-clock and the conversation title, for example:
+**Download ZIP** saves the same bundle instead. The filename has the date, time and conversation title, for example:
 `20261002-09-05 Project planning.zip`. Invalid filename characters are removed.
 Hours use `00–23`; hyphens replace colons for Windows.
-
-Keep both ChatGPT tabs open until branching finishes. The extension finishes
-once ChatGPT has saved the prompt and ZIP, started work, and accepted the new
-chat title. It does not wait for the full response. Do not reload them or
-change the new chat while it runs. The progress view stays on the running job
-if you switch tabs. Otherwise, the popup follows the active tab.
 
 **Cancel** stops extension actions and returns to the controls. It does not
 delete chats or uploaded files, stop a ChatGPT response already in progress,
@@ -46,14 +50,6 @@ or remove a ZIP download that has already started. Check any new tab yourself.
 You can close and reopen the popup to check progress. The bar counts completed
 steps, not elapsed time or bytes. ChatGPT can keep reading the ZIP after the
 extension finishes.
-
-Completion notices appear below the controls, newest first, with up to three
-kept until you dismiss them or restart the browser. Click a branch title to
-select its open tab, or open it again if that tab is closed.
-
-If a file cannot be retrieved, branching stops. Use **Download ZIP** to save
-what is available and check the failure report. If a new tab already exists
-after an error, check it before trying again to avoid creating a duplicate.
 
 ## What is in the ZIP?
 
@@ -78,10 +74,11 @@ message box and sends this prompt:
 
 The extension confirms that ChatGPT saved the attachment and prompt, then sets
 and checks the numbered branch title. It leaves your original tab selected.
-The new tab watches locally for the first response to finish, for up to
-30 minutes. It then checks the title twice, one minute apart, and restores
-the branch title if ChatGPT changed it. Keep that tab open during this step.
-These checks stop on a rate-limit response.
+Before renaming, the extension waits for ChatGPT's `title_generation` event in
+the existing response stream (up to two minutes). It then sets the branch name
+and verifies the saved title through the API. ChatGPT's sidebar can still show
+the old title until it refreshes. No extra requests are sent while waiting for
+the title event.
 
 There is no separate server, analytics, or saved session token. Branching sends
 the archive to ChatGPT as an attachment; Download ZIP saves it locally.
