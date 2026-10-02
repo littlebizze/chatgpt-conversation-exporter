@@ -3,3 +3,5 @@ dist/
 release/
 *.tsbuildinfo
 .DS_Store
+
+.idea/
