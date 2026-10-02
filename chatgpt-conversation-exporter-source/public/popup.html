@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChatGPT Conversation Exporter</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main aria-busy="true">
+    <h1>ChatGPT Conversation Exporter</h1>
+    <button id="export" disabled>Export</button>
+    <div class="status-row">
+      <span id="spinner" class="spinner" aria-hidden="true"></span>
+      <p id="status" role="status">Checking page…</p>
+    </div>
+    <progress id="progress" aria-label="Export progress" aria-describedby="progress-count" hidden></progress>
+    <p id="progress-count" hidden></p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

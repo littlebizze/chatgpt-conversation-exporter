@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Conversation Exporter",
+  "version": "1.0.0",
+  "description": "Save ChatGPT conversations as JSON and their files as a ZIP archive.",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "action": {
+    "default_title": "Export ChatGPT conversation",
+    "default_popup": "popup.html"
+  }
+}
