@@ -1,10 +1,9 @@
 {
   "name": "chatgpt-conversation-exporter",
   "version": "1.0.0",
-  "description": "Export ChatGPT conversations and files from your browser.",
+  "description": "Branch or download ChatGPT conversations and files from your browser.",
   "author": "Maryam Jahanshahi",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "engines": {
     "node": ">=22"
